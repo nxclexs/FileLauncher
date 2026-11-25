@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -304,11 +305,13 @@ namespace FileLauncher
         }
     }
 
-    /// <summary>Небольшое окно «Автор» со ссылкой на Telegram.</summary>
+    /// <summary>Небольшое окно «Автор» со ссылками на Telegram и GitHub.</summary>
     internal sealed class AboutDialog : Form
     {
         private const string AuthorText = "Автор проекта - t.me/silxncer";
         private const string AuthorUrl = "https://t.me/silxncer";
+        private const string GithubText = "github.com/nxclexs/FileLauncher";
+        private const string GithubUrl = "https://github.com/nxclexs/FileLauncher";
 
         public AboutDialog()
         {
@@ -318,10 +321,9 @@ namespace FileLauncher
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
-            ClientSize = new Size(370, 158);
+            ClientSize = new Size(400, 196);
             Font = new Font("Segoe UI", 9F);
             BackColor = Color.FromArgb(248, 246, 252);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
 
             try
             {
@@ -348,16 +350,32 @@ namespace FileLauncher
             message.LinkBehavior = LinkBehavior.AlwaysUnderline;
             message.LinkArea = new LinkArea(0, AuthorText.Length);
             message.Cursor = Cursors.Hand;
-            message.Location = new Point(10, 40);
+            message.Location = new Point(25, 30);
             message.Size = new Size(350, 34);
-            message.LinkClicked += delegate { OpenAuthorLink(); };
+            message.LinkClicked += delegate { OpenLink(AuthorUrl); };
             card.Controls.Add(message);
+
+            LinkLabel github = new LinkLabel();
+            github.Text = GithubText;
+            github.AutoSize = false;
+            github.TextAlign = ContentAlignment.MiddleCenter;
+            github.Font = new Font("Segoe UI", 9.5F);
+            github.LinkColor = Color.FromArgb(124, 92, 214);
+            github.ActiveLinkColor = Color.FromArgb(108, 76, 200);
+            github.VisitedLinkColor = Color.FromArgb(124, 92, 214);
+            github.LinkBehavior = LinkBehavior.AlwaysUnderline;
+            github.LinkArea = new LinkArea(0, GithubText.Length);
+            github.Cursor = Cursors.Hand;
+            github.Location = new Point(25, 74);
+            github.Size = new Size(350, 26);
+            github.LinkClicked += delegate { OpenLink(GithubUrl); };
+            card.Controls.Add(github);
 
             Button close = new Button();
             close.Text = "Закрыть";
             close.DialogResult = DialogResult.OK;
             close.Size = new Size(110, 32);
-            close.Location = new Point((ClientSize.Width - 110) / 2, 104);
+            close.Location = new Point((ClientSize.Width - 110) / 2, 142);
             close.FlatStyle = FlatStyle.Flat;
             close.FlatAppearance.BorderColor = Color.FromArgb(120, 168, 158, 190);
             close.BackColor = Color.FromArgb(255, 252, 251, 255);
@@ -369,11 +387,11 @@ namespace FileLauncher
             CancelButton = close;
         }
 
-        private static void OpenAuthorLink()
+        private static void OpenLink(string url)
         {
             try
             {
-                ProcessStartInfo info = new ProcessStartInfo(AuthorUrl);
+                ProcessStartInfo info = new ProcessStartInfo(url);
                 info.UseShellExecute = true;
                 Process.Start(info);
             }
@@ -391,6 +409,8 @@ namespace FileLauncher
         private const string LegacyListFileName = "list.txt";
         private const string ScenesFileName = "scenes.txt";
         private const string SettingsFileName = "settings.txt";
+        private const string CustomBackgroundFile = "background-user.png";
+        private const string CustomHeroFile = "hero-user.png";
         private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
         private const string RunValueName = "FileLauncher";
 
@@ -428,6 +448,9 @@ namespace FileLauncher
         private NotifyIcon trayIcon;
         private ToolStripMenuItem trayRunItem;
         private ToolStripMenuItem trayAutostartItem;
+        private HeroPanel heroPanel;
+        private ContextMenuStrip backgroundMenu;
+        private ToolStripMenuItem resetBackgroundItem;
         private System.Windows.Forms.Timer startupTimer;
 
         public MainForm(string[] args)
@@ -438,6 +461,8 @@ namespace FileLauncher
             startHidden = Program.HasArgument(args, Program.TrayArgument);
 
             BuildUi();
+            LoadHeroImage();
+            BuildBackgroundMenu();
             LoadScenes();
             LoadSettings();
             BuildTray();
@@ -856,10 +881,32 @@ namespace FileLauncher
 
             Button aboutButton = MakeSmallButton("Автор");
             aboutButton.Height = 28;
-            aboutButton.Margin = new Padding(0, 10, 0, 0);
+            aboutButton.Margin = new Padding(0, 0, 0, 0);
             aboutButton.ForeColor = MutedColor;
             aboutButton.Click += OnShowAuthor;
-            sideLayout.Controls.Add(aboutButton, 0, 3);
+
+            Button backgroundButton = MakeSmallButton("Фон");
+            backgroundButton.Height = 28;
+            backgroundButton.Margin = new Padding(0, 0, 5, 0);
+            backgroundButton.ForeColor = MutedColor;
+            backgroundButton.Click += delegate
+            {
+                backgroundMenu.Show(backgroundButton, new Point(0, backgroundButton.Height));
+            };
+
+            TableLayoutPanel bottomButtons = new TableLayoutPanel();
+            bottomButtons.Dock = DockStyle.Fill;
+            bottomButtons.AutoSize = false;
+            bottomButtons.Height = 28;
+            bottomButtons.ColumnCount = 2;
+            bottomButtons.RowCount = 1;
+            bottomButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            bottomButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            bottomButtons.BackColor = Color.Transparent;
+            bottomButtons.Margin = new Padding(0, 10, 0, 0);
+            bottomButtons.Controls.Add(backgroundButton, 0, 0);
+            bottomButtons.Controls.Add(aboutButton, 1, 0);
+            sideLayout.Controls.Add(bottomButtons, 0, 3);
 
             GlassPanel main = new GlassPanel(255);
             main.Dock = DockStyle.Fill;
@@ -872,7 +919,7 @@ namespace FileLauncher
             HeroPanel hero = new HeroPanel();
             hero.Dock = DockStyle.Fill;
             hero.Margin = new Padding(12, 0, 0, 0);
-            LoadHero(hero);
+            heroPanel = hero;
             root.Controls.Add(hero, 2, 0);
 
             TableLayoutPanel mainLayout = new TableLayoutPanel();
@@ -1085,50 +1132,320 @@ namespace FileLauncher
 
         private void LoadBackground()
         {
-            try
+            Bitmap custom = TryLoadCustomImage(CustomBackgroundFile);
+            if (custom != null)
             {
-                using (Stream stream = Assembly.GetExecutingAssembly()
-                    .GetManifestResourceStream("FileLauncher.background.png"))
-                {
-                    if (stream == null)
-                    {
-                        return;
-                    }
-
-                    using (Image image = Image.FromStream(stream))
-                    {
-                        BackgroundImage = new Bitmap(image);
-                        BackgroundImageLayout = ImageLayout.Zoom;
-                    }
-                }
+                BackgroundImage = custom;
+                BackgroundImageLayout = ImageLayout.Zoom;
+                return;
             }
-            catch (Exception)
+
+            Bitmap embedded = LoadEmbeddedImage("FileLauncher.background.png");
+            if (embedded != null)
             {
-                // без фона программа тоже работает
+                BackgroundImage = embedded;
+                BackgroundImageLayout = ImageLayout.Zoom;
             }
         }
 
-        private void LoadHero(HeroPanel hero)
+        private void LoadHeroImage()
+        {
+            if (heroPanel == null)
+            {
+                return;
+            }
+
+            Image next = TryLoadCustomImage(CustomHeroFile);
+            if (next == null)
+            {
+                next = LoadEmbeddedImage("FileLauncher.hero.png");
+            }
+
+            if (next == null)
+            {
+                return;
+            }
+
+            Image old = heroPanel.BackgroundImage;
+            heroPanel.BackgroundImage = next;
+            if (old != null)
+            {
+                old.Dispose();
+            }
+        }
+
+        private Bitmap TryLoadCustomImage(string fileName)
         {
             try
             {
-                using (Stream stream = Assembly.GetExecutingAssembly()
-                    .GetManifestResourceStream("FileLauncher.hero.png"))
+                string path = Path.Combine(dataFolder, fileName);
+                if (!File.Exists(path))
+                {
+                    return null;
+                }
+
+                using (FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read))
+                using (Image image = Image.FromStream(stream))
+                {
+                    return new Bitmap(image);
+                }
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static Bitmap LoadEmbeddedImage(string resourceName)
+        {
+            try
+            {
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
                 {
                     if (stream == null)
                     {
-                        return;
+                        return null;
                     }
 
                     using (Image image = Image.FromStream(stream))
                     {
-                        hero.BackgroundImage = new Bitmap(image);
+                        return new Bitmap(image);
                     }
                 }
             }
             catch (Exception)
             {
-                // без картиночной панели интерфейс тоже работает
+                return null;
+            }
+        }
+
+        // ------------------------------------------------------------- фон
+
+        private void BuildBackgroundMenu()
+        {
+            backgroundMenu = new ContextMenuStrip();
+
+            ToolStripMenuItem choose = new ToolStripMenuItem("Выбрать картинку…");
+            choose.Click += OnChooseBackground;
+            backgroundMenu.Items.Add(choose);
+
+            resetBackgroundItem = new ToolStripMenuItem("Вернуть стандартный фон");
+            resetBackgroundItem.Click += OnResetBackground;
+            backgroundMenu.Items.Add(resetBackgroundItem);
+
+            UpdateBackgroundMenuState();
+        }
+
+        private void UpdateBackgroundMenuState()
+        {
+            if (resetBackgroundItem == null)
+            {
+                return;
+            }
+
+            resetBackgroundItem.Enabled =
+                File.Exists(Path.Combine(dataFolder, CustomBackgroundFile)) ||
+                File.Exists(Path.Combine(dataFolder, CustomHeroFile));
+        }
+
+        private void OnChooseBackground(object sender, EventArgs e)
+        {
+            using (OpenFileDialog dialog = new OpenFileDialog())
+            {
+                dialog.Title = "Выберите картинку для фона";
+                dialog.Filter = "Картинки|*.jpg;*.jpeg;*.png;*.bmp;*.gif|Все файлы|*.*";
+                dialog.CheckFileExists = true;
+
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                try
+                {
+                    using (Image source = Image.FromFile(dialog.FileName))
+                    {
+                        ApplyCustomBackground(source);
+                    }
+
+                    statusLabel.Text = "Фон изменён: " + Path.GetFileName(dialog.FileName);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(
+                        this,
+                        "Не удалось открыть картинку:" + Environment.NewLine + ex.Message,
+                        AppTitle,
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                }
+            }
+        }
+
+        private void ApplyCustomBackground(Image source)
+        {
+            Bitmap background = BuildBackgroundFromImage(source);
+            Bitmap hero = BuildHeroFromImage(source);
+
+            try
+            {
+                if (!Directory.Exists(dataFolder))
+                {
+                    Directory.CreateDirectory(dataFolder);
+                }
+
+                background.Save(Path.Combine(dataFolder, CustomBackgroundFile), ImageFormat.Png);
+                hero.Save(Path.Combine(dataFolder, CustomHeroFile), ImageFormat.Png);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    this,
+                    "Не удалось сохранить фон:" + Environment.NewLine + ex.Message,
+                    AppTitle,
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+
+            Image oldBackground = BackgroundImage;
+            BackgroundImage = background;
+            BackgroundImageLayout = ImageLayout.Zoom;
+            if (oldBackground != null)
+            {
+                oldBackground.Dispose();
+            }
+
+            if (heroPanel != null)
+            {
+                Image oldHero = heroPanel.BackgroundImage;
+                heroPanel.BackgroundImage = hero;
+                if (oldHero != null)
+                {
+                    oldHero.Dispose();
+                }
+            }
+
+            UpdateBackgroundMenuState();
+        }
+
+        private void OnResetBackground(object sender, EventArgs e)
+        {
+            try
+            {
+                File.Delete(Path.Combine(dataFolder, CustomBackgroundFile));
+                File.Delete(Path.Combine(dataFolder, CustomHeroFile));
+            }
+            catch (Exception)
+            {
+                // файл мог быть занят — не критично
+            }
+
+            LoadBackground();
+            LoadHeroImage();
+            UpdateBackgroundMenuState();
+            statusLabel.Text = "Вернулся стандартный фон.";
+        }
+
+        private static Bitmap BuildBackgroundFromImage(Image source)
+        {
+            const int width = 2040;
+            const int height = 1320;
+
+            Rectangle crop = CenterCrop(source.Width, source.Height, (double)width / height);
+
+            Bitmap result = new Bitmap(width, height);
+            using (Graphics g = Graphics.FromImage(result))
+            {
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                g.DrawImage(source, new Rectangle(0, 0, width, height), crop, GraphicsUnit.Pixel);
+            }
+
+            Soften(result, 2);
+
+            using (Graphics g = Graphics.FromImage(result))
+            using (SolidBrush veil = new SolidBrush(Color.FromArgb(150, 255, 255, 255)))
+            {
+                g.FillRectangle(veil, 0, 0, width, height);
+            }
+
+            return result;
+        }
+
+        private static Bitmap BuildHeroFromImage(Image source)
+        {
+            const int width = 496;
+            const int height = 1264;
+
+            Rectangle crop = CenterCrop(source.Width, source.Height, (double)width / height);
+
+            Bitmap result = new Bitmap(width, height);
+            using (Graphics g = Graphics.FromImage(result))
+            {
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                g.DrawImage(source, new Rectangle(0, 0, width, height), crop, GraphicsUnit.Pixel);
+            }
+
+            return result;
+        }
+
+        private static Rectangle CenterCrop(int width, int height, double targetAspect)
+        {
+            double sourceAspect = (double)width / height;
+            int cropWidth;
+            int cropHeight;
+
+            if (sourceAspect > targetAspect)
+            {
+                cropHeight = height;
+                cropWidth = (int)Math.Round(height * targetAspect);
+            }
+            else
+            {
+                cropWidth = width;
+                cropHeight = (int)Math.Round(width / targetAspect);
+            }
+
+            return new Rectangle(
+                (width - cropWidth) / 2,
+                (height - cropHeight) / 2,
+                cropWidth,
+                cropHeight);
+        }
+
+        private static void Soften(Bitmap bitmap, int steps)
+        {
+            int width = bitmap.Width;
+            int height = bitmap.Height;
+
+            for (int i = 0; i < steps; i++)
+            {
+                int smallWidth = Math.Max(8, width / 6);
+                int smallHeight = Math.Max(8, height / 6);
+
+                using (Bitmap small = new Bitmap(smallWidth, smallHeight))
+                {
+                    using (Graphics g = Graphics.FromImage(small))
+                    {
+                        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                        g.DrawImage(bitmap,
+                            new Rectangle(0, 0, smallWidth, smallHeight),
+                            new Rectangle(0, 0, width, height),
+                            GraphicsUnit.Pixel);
+                    }
+
+                    using (Graphics g = Graphics.FromImage(bitmap))
+                    {
+                        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                        g.DrawImage(small,
+                            new Rectangle(0, 0, width, height),
+                            new Rectangle(0, 0, smallWidth, smallHeight),
+                            GraphicsUnit.Pixel);
+                    }
+                }
             }
         }
 
