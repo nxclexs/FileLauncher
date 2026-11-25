@@ -1,0 +1,14 @@
+﻿# build output
+FileLauncher.exe
+*.pdb
+*.exe.config
+
+# IDE / user files
+*.user
+.vs/
+.idea/
+
+# temp
+.build/
+Thumbs.db
+desktop.ini
